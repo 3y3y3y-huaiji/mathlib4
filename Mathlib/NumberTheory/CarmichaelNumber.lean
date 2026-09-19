@@ -174,65 +174,21 @@ theorem isCarmichael_1105 : IsCarmichael 1105 := by
   simp [isCarmichael_iff_korselt_primeFactorsList]
   norm_num
 
-/-- Small prime divisors up to 37. -/
-def testPrimes : List ℕ := [3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37]
-
-/-- Small prime quotients up to 181 arising from candidate factorization. -/
-def quotientPrimes : List ℕ :=
-  [41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113,
-   127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181]
-
-lemma mem_testPrimes_prime {p : ℕ} (h : p ∈ testPrimes) : p.Prime := by
-  simp only [testPrimes, List.mem_cons] at h
-  repeat' rcases h with rfl | h
-  all_goals norm_num
-
-lemma mem_quotientPrimes_prime {p : ℕ} (h : p ∈ quotientPrimes) : p.Prime := by
-  simp only [quotientPrimes, List.mem_cons] at h
-  repeat' rcases h with rfl | h
-  all_goals norm_num
-
-/-- Computable decision predicate for candidate Carmichael numbers. -/
+/-- Computable decision predicate for candidate Carmichael numbers below 561. -/
 def isCarmichaelCandidate (n : ℕ) : Bool :=
   if n ≤ 2 || n % 2 == 0 then false
-  else if testPrimes.contains n then false
-  else if (List.range' 2 22).any (fun d => n % (d * d) == 0) then false
-  else if testPrimes.any (fun p =>
-    if n % p == 0 then
-      (n - 1) % (p - 1) != 0 || (quotientPrimes.contains (n / p) && (n - 1) % ((n / p) - 1) != 0)
-    else false
-  ) then false
-  else if (List.range' 2 22).all (fun d => n % d != 0) then false
-  else true
+  else if (List.range' 2 22).all (fun d => decide (n < d * d) || n % d != 0) then false
+  else if n == 341 then decide (ProbablePrime 341 3)
+  else decide (ProbablePrime n 2)
 
 theorem isCarmichaelCandidate_of_isCarmichael {n : ℕ} (hn : n < 561) (hc : n.IsCarmichael) :
     isCarmichaelCandidate n = true := by
   unfold isCarmichaelCandidate
-  split_ifs with h2 htp hsq hk hall
+  split_ifs with h2 hall h341
   · simp only [Bool.or_eq_true, decide_eq_true_iff] at h2
     rcases h2 with hle | heven
     · have := hc.two_lt; lia
     · obtain ⟨k, rfl⟩ := hc.odd; lia
-  · have hp_mem : n ∈ testPrimes := List.mem_of_elem_eq_true htp
-    exact absurd (mem_testPrimes_prime hp_mem) hc.not_prime
-  · rw [List.any_eq_true] at hsq
-    rcases hsq with ⟨d, hd_mem, hd_div⟩
-    have hd_ge : 2 ≤ d := by rcases List.mem_range'.mp hd_mem with ⟨i, -, rfl⟩; lia
-    have hdiv : d * d ∣ n := Nat.dvd_of_mod_eq_zero (beq_iff_eq.mp hd_div)
-    have hu := isUnit_iff_eq_one.mp (hc.squarefree d hdiv)
-    lia
-  · rw [List.any_eq_true] at hk
-    rcases hk with ⟨p, hp_mem, hcond⟩
-    have hkorselt := isCarmichael_iff_korselt.mp hc |>.2.2.2
-    split_ifs at hcond with hdvd
-    have hp_dvd : p ∣ n := Nat.dvd_of_mod_eq_zero (beq_iff_eq.mp hdvd)
-    have hp_prime : p.Prime := mem_testPrimes_prime hp_mem
-    simp only [Bool.or_eq_true, Bool.and_eq_true, bne_iff_ne, ne_eq] at hcond
-    rcases hcond with hp_fail | ⟨hq_mem, hq_fail⟩
-    · exact hp_fail (Nat.dvd_iff_mod_eq_zero.mp (hkorselt p hp_prime hp_dvd))
-    · have hq_prime : (n / p).Prime := mem_quotientPrimes_prime (List.mem_of_elem_eq_true hq_mem)
-      have hdiv_qp := Nat.div_dvd_of_dvd hp_dvd
-      exact hq_fail (Nat.dvd_iff_mod_eq_zero.mp (hkorselt (n / p) hq_prime hdiv_qp))
   · have h_sqle := minFac_sq_le_self (by lia) hc.not_prime
     have h_mf_lt : minFac n < 24 := by
       by_contra! h24
@@ -243,33 +199,45 @@ theorem isCarmichaelCandidate_of_isCarmichael {n : ℕ} (hn : n < 561) (hc : n.I
       rw [List.mem_range']
       refine ⟨minFac n - 2, by lia, by lia⟩
     have hall_dvd := List.all_eq_true.mp hall (minFac n) hd_mem
-    simp only [bne_iff_ne, ne_eq] at hall_dvd
-    exact hall_dvd (Nat.mod_eq_zero_of_dvd (minFac_dvd n))
-  · rfl
+    simp only [Bool.or_eq_true, decide_eq_true_iff, bne_iff_ne, ne_eq] at hall_dvd
+    rcases hall_dvd with hgt | hdvd
+    · lia
+    · exact hdvd (Nat.mod_eq_zero_of_dvd (minFac_dvd n))
+  · have hn341 : n = 341 := beq_iff_eq.mp h341
+    subst hn341
+    have hcop : Nat.Coprime 3 341 := by decide
+    have hpp := hc.probablePrime_of_coprime hcop
+    exact decide_eq_true hpp
+  · have hcop : Nat.Coprime 2 n := Nat.coprime_two_left.mpr hc.odd
+    have hpp := hc.probablePrime_of_coprime hcop
+    exact decide_eq_true hpp
 
-set_option maxRecDepth 2000 in
+set_option exponentiation.threshold 1000
+set_option maxRecDepth 2000
+
 /-- Bounded verifier checking that no natural number below N is Carmichael. -/
-def checkCarmichaelBound (N : ℕ) : Bool := (List.range N).all (fun n => !isCarmichaelCandidate n)
+def checkCarmichaelBound (N : ℕ) : Bool :=
+  (List.range N).all (fun n => !isCarmichaelCandidate n)
 
 theorem checkCarmichaelBound_sound {N : ℕ} (hN : N ≤ 561) (h : checkCarmichaelBound N = true) :
     ∀ n < N, ¬ n.IsCarmichael := by
   intro n hn
   have hn_lt : n < 561 := by lia
   unfold checkCarmichaelBound at h
-  have h_dec := List.all_eq_true.mp h n (List.mem_range.mpr hn)
-  simp only [Bool.not_eq_true'] at h_dec
+  have hall := List.all_eq_true.mp h n (List.mem_range.mpr hn)
+  simp only [Bool.not_eq_true'] at hall
   intro hc
-  have h_cand := isCarmichaelCandidate_of_isCarmichael hn_lt hc
-  rw [h_cand] at h_dec
+  have hcand := isCarmichaelCandidate_of_isCarmichael hn_lt hc
+  rw [hall] at hcand
   contradiction
 
-set_option maxRecDepth 2000 in
 /-- There are no Carmichael numbers strictly less than 561. -/
 theorem not_isCarmichael_of_lt_561 {n : ℕ} (hn : n < 561) : ¬ n.IsCarmichael :=
-  checkCarmichaelBound_sound (by lia) (by decide) n hn
+  checkCarmichaelBound_sound (le_refl 561) (by decide) n hn
 
 /-- 561 is the minimal Carmichael number. -/
-theorem isCarmichael_min {n : ℕ} (hn : n.IsCarmichael) : 561 ≤ n :=
-  not_lt.mp (not_isCarmichael_of_lt_561 · hn)
+theorem isCarmichael_min {n : ℕ} (hn : n.IsCarmichael) : 561 ≤ n := by
+  by_contra! h
+  exact not_isCarmichael_of_lt_561 h hn
 
 end Nat
