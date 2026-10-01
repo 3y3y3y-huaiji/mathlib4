@@ -174,4 +174,52 @@ theorem isCarmichael_1105 : IsCarmichael 1105 := by
   simp [isCarmichael_iff_korselt_primeFactorsList]
   norm_num
 
+/-- Computable decider evaluating whether `n` is a Carmichael number via Korselt's criterion. -/
+def isCarmichaelDec (n : ℕ) : Bool :=
+  bif (n ≤ 2 || n % 2 == 0) then false
+  else
+    let f := n.primeFactorsList
+    (!decide n.Prime && decide f.Nodup && f.all (fun p => (n - 1) % (p - 1) == 0))
+
+theorem isCarmichaelDec_iff {n : ℕ} : isCarmichaelDec n = true ↔ n.IsCarmichael := by
+  rw [isCarmichael_iff_korselt_primeFactorsList]
+  unfold isCarmichaelDec
+  split
+  · rename_i h
+    simp only [Bool.or_eq_true, decide_eq_true_iff, beq_iff_eq] at h
+    constructor
+    · intro htrue; contradiction
+    · rintro ⟨hn2, _, _, _⟩
+      cases h with
+      | inl hle => omega
+      | inr heven =>
+        have hodd : Odd n :=
+          (isCarmichael_iff_korselt_primeFactorsList.mpr ⟨hn2, by assumption⟩).odd
+        omega
+  · simp only [Bool.and_eq_true, Bool.not_eq_true', decide_eq_false_iff_not,
+      decide_eq_true_iff, List.all_eq_true, beq_iff_eq, Nat.dvd_iff_mod_eq_zero]
+    constructor
+    · rintro ⟨⟨hnp, hnodup⟩, hall⟩
+      have hn2 : 2 < n := by
+        by_contra! hle
+        have : n ≤ 2 || n % 2 == 0 := by simp [hle]
+        contradiction
+      exact ⟨hn2, hnp, hnodup, hall⟩
+    · rintro ⟨_, hnp, hnodup, hall⟩
+      exact ⟨⟨hnp, hnodup⟩, hall⟩
+
+instance : DecidablePred IsCarmichael := fun n =>
+  decidable_of_iff (isCarmichaelDec n = true) isCarmichaelDec_iff
+
+/-- There are no Carmichael numbers strictly less than 561. -/
+theorem not_isCarmichael_of_lt_561 {n : ℕ} (hn : n < 561) : ¬ n.IsCarmichael := by
+  intro hc
+  have h_all : (List.range 561).all (fun k => !isCarmichaelDec k) = true := by decide +kernel
+  have := List.all_eq_true.mp h_all n (List.mem_range.mpr hn)
+  simp [isCarmichaelDec_iff.mpr hc] at this
+
+/-- 561 is the smallest Carmichael number. -/
+theorem isCarmichael_min {n : ℕ} (hn : n.IsCarmichael) : 561 ≤ n :=
+  not_lt.mp (not_isCarmichael_of_lt_561 · hn)
+
 end Nat
